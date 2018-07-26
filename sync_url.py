@@ -11,7 +11,6 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-base_dir = ''
 site_url = 'http://www.baloo.co/'
 site_path = 'www/'
 
@@ -46,6 +45,9 @@ def log_save(_flog):
 
 
 def like_url(href):
+    if href is None:
+        return False
+
     if href.strip().startswith('http') and '.' in href:
        return True
 
@@ -113,152 +115,146 @@ def chk_href_type(href):
     return(FTYPE_INDEX)  ##INDEX
 
 
-def save_res(link):
-    if not 'baloo.co' in link:
-        return()
+def save_res(bs, element, check):
+    links = bs.find_all(element)
 
-    flink = link
-    ftype = chk_href_type(link)
-    if FTYPE_INDEX == ftype:
-        flink = link + '/index.html'
+    for l in links:
+        if element == 'link':
+            _url = l.get('_url')
+        elif element == 'script':
+            _url = l.get('src')
+        elif element == 'img':
+            _url = l.get('src')
 
-    fstream = False
-    if FTYPE_DATA == ftype:
-        fstream = True
+        if _url is None:
+            continue
 
-    try:
-        r = requests.get(link, stream=fstream)
-    except requests.exceptions.ConnectionError:
-        print('Connection Error - {}'.format(link))
-        return()
+        if check in _url or element == 'img':
+            if not like_url(_url):
+                if _url.startswith('/'):
+                    _url = 'http://www.baloo.co' + _url
+                else:
+                    _url = 'http://www.baloo.co/' + _url
 
-    if r.status_code != 200:
-        print('Invalid Response - {}'.format(r.status_code))
-        return()
+            if not 'baloo.co' in _url:
+                continue
 
-    fname = flink.replace(site_url, '').strip() 
-    if 'http://baloo.co/admin/covers/' in fname:
-        fname = flink.replace('http://baloo.co/', '').strip() 
+            if _url in visited_links:
+                continue
 
-    fname = flink.replace(site_url, '').strip() 
-    log_pr('::{}: {} => {}'.format(ftype, link, fname))
-    os.makedirs(os.path.dirname(site_path + fname), exist_ok=True)
-    with open(site_path + fname, 'wb') as f:
-        if FTYPE_INDEX == ftype:     ## INDEX => TEXT
-            #f.write(r.text.encode('utf-8'))
-            text = r.text.replace('href="/"','href="#"')
-            text = text.replace('href="/','href="')
-            text = text.replace('src="/','src="')
-            f.write(text.encode('utf-8'))
-        elif FTYPE_TEXT == ftype:    ## TEXT
-            f.write(r.text.encode('utf-8'))
-        elif FTYPE_DATA == ftype:    ## DATA
-            f.write(r.raw.read())
-        f.close()
+            Fstream = False
+            ftype = chk_href_type(_url)
+            if FTYPE_DATA == ftype:
+                Fstream = True
+
+            fname = _url.replace(site_url, '').strip()
+            if 'http://baloo.co/admin/covers/' in fname:
+                fname = _url.replace('http://baloo.co/', '').strip()
+
+            log_pr('::{}: {} => {}'.format(ftype, _url, fname))
+            try:
+                r = requests.get(_url, stream=Fstream)
+            except requests.exceptions.ConnectionError:
+                error_links.append(_url)
+                continue
+
+            if r.status_code != 200:
+                error_links.append(_url)
+                continue
+
+            visited_links.append(_url)
+            os.makedirs(os.path.dirname(site_path + fname), exist_ok=True)
+            with open(site_path + fname, 'wb') as f:
+                if FTYPE_DATA == ftype:
+                    f.write(r.raw.read())
+                else:
+                    f.write(r.text.encode('utf-8'))
+                f.close()
+            log_save('.tmp.log')
 
 
 def crawl(link):
-    global site_url
-    global visited_links
-
     if not like_url(link) or chk_skip(link) or not chk_baloo(link):
-        print('---: {}'.format(link))
+        log_pr('---: {}'.format(link))
         return()
 
-    #if site_url in link and link not in visited_links:
-    if link not in visited_links:
-        log_pr('+++: {}'.format(link))
-        #print('+++: {}'.format(link))
-        visited_links.append(link)
+    if link in visited_links or link.lower().endswith('/'):
+        log_pr('---: {}'.format(link))
+        return()
 
-        if link.lower().endswith('/'):
-            print('0. Working with : {} >>> SKIP'.format(link))
-            return()
+    ftype = chk_href_type(link)
+    if FTYPE_INDEX != ftype:
+        log_pr('---: {}'.format(link))
+        return()
 
-        if not 'baloo.co' in link:
-            return()
+    flink = link + '/index.html'
+    log_pr('+++: {}'.format(link))
+    visited_links.append(link)
 
-        try:
-            r = requests.get(link)
-        except requests.exceptions.ConnectionError:
-            print('Connection Error - {}'.format(link))
-            return()
+    try:
+        r = requests.get(link)
+    except requests.exceptions.ConnectionError:
+        log_pr('Connection Error - {}'.format(link))
+        return()
 
-        if r.status_code != 200:
-            print('Invalid Response - {}'.format(r.status_code))
-            return()
+    if r.status_code != 200:
+        log_pr('Invalid Response - {}'.format(r.status_code))
+        return()
 
-        flink = link
-        ftype = chk_href_type(link)
-        if FTYPE_INDEX == ftype:
-            flink = link + '/index.html'
+    fname = flink.replace(site_url, '').strip()
+    if 'http://baloo.co/admin/covers/' in fname:
+        fname = flink.replace('http://baloo.co/', '').strip()
 
-        fname = flink.replace(site_url, '').strip() 
-        if 'http://baloo.co/admin/covers/' in fname:
-            fname = flink.replace('http://baloo.co/', '').strip() 
+    log_pr('::{}: {} => {}'.format(ftype, link, fname))
+    os.makedirs(os.path.dirname(site_path + fname), exist_ok=True)
+    with open(site_path + fname, 'wb') as f:
+        text = r.text
+        text = text.replace('href="/"','href="#"')
+        text = text.replace('href="/','href="')
+        text = text.replace('src="/','src="')
+        f.write(text.encode('utf-8'))
+        f.close()
 
-        os.makedirs(os.path.dirname(site_path + fname), exist_ok=True)
-        with open(site_path + fname, 'wb') as f:
-            #f.write(r.text.encode('utf-8'))
-            text = r.text.replace('href="/"','href="#"')
-            text = text.replace('href="/','href="')
-            text = text.replace('src="/','src="')
-            f.write(text.encode('utf-8'))
-            f.close()
+    bs = BeautifulSoup(r.text, 'html.parser')
+    save_res(bs=bs, element='link', check='.css')
+    save_res(bs=bs, element='script', check='.js')
+    save_res(bs=bs, element='img', check='.n.o')
+    return()
 
-        soup = BeautifulSoup(r.text, 'html.parser')
-        for link in soup.find_all('img'):
-            _url = link.get('src')
+    for link in bs.find_all('a'):
+        _url = link.get('href')
 
-            if chk_skip(_url) or '-' in _url:
-                log_pr('---: {}'.format(_url))
-                continue
+        if chk_skip(_url) or '-' in _url:
+            log_pr('---: {}'.format(_url))
+            continue
 
-            m_url = _url
-            if not like_url(_url):
-                if _url.startswith('/'):
-                    _url = 'http://www.baloo.co' + _url 
-                else:
-                    _url = 'http://www.baloo.co/' + _url 
+        m_url = _url
+        if not like_url(_url):
+            if _url.startswith('/'):
+                _url = 'http://www.baloo.co' + _url
+            else:
+                _url = 'http://www.baloo.co/' + _url
 
-            save_res(_url)
-
-        for link in soup.find_all('a'):
-            _url = link.get('href')
-
-            if chk_skip(_url) or '-' in _url:
-                log_pr('---: {}'.format(_url))
-                continue
-
-            m_url = _url
-            if not like_url(_url):
-                if _url.startswith('/'):
-                    _url = 'http://www.baloo.co' + _url 
-                    #_url = site_url + '/' + _url 
-                else:
-                    _url = 'http://www.baloo.co/' + _url 
-                    #_url = site_url + _url
-            #print('HREF: {} => {}'.format(m_url, _url))
-
-            log_save('run_tmp.log')
-
-            if chk_baloo(_url):
+        log_save('.tmp.log')
+        if chk_baloo(_url):
+            try:
                 crawl(_url)
+            except:
+                error_links.append(link.get('href'))
 
 
 def run():
     crawl('http://www.baloo.co')
     return()
 
-    print('Link crawled\n')
+    log_pr('Link crawled\n')
     for link in visited_links:
-        print('--- {}'.format(link))
-    
-    print('\n\nLink error\n')
+        log_pr('--- {}'.format(link))
+
+    log_pr('\n\nLink error\n')
     for link in error_links:
-        print('--- {}'.format(link))
+        log_pr('--- {}'.format(link))
 
 if __name__=='__main__':
     run()
     log_save('run.log')
-    #sys.exit()

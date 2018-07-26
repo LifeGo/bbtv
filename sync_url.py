@@ -120,7 +120,7 @@ def save_res(bs, element, check):
 
     for l in links:
         if element == 'link':
-            _url = l.get('_url')
+            _url = l.get('href')
         elif element == 'script':
             _url = l.get('src')
         elif element == 'img':
@@ -219,7 +219,6 @@ def crawl(link):
     save_res(bs=bs, element='link', check='.css')
     save_res(bs=bs, element='script', check='.js')
     save_res(bs=bs, element='img', check='.n.o')
-    return()
 
     for link in bs.find_all('a'):
         _url = link.get('href')

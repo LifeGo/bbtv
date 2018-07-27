@@ -173,7 +173,12 @@ def save_res(bs, element, check):
             log_save('.tmp.log')
 
 
-def crawl(link):
+log_idx = 0
+
+def crawl(link, depth):
+    global log_idx
+    mlink = link
+    log_pr('>>>: @{}'.format(depth))
     if not like_url(link) or chk_skip(link) or not chk_baloo(link):
         log_pr('---: {}'.format(link))
         return()
@@ -209,9 +214,9 @@ def crawl(link):
     os.makedirs(os.path.dirname(site_path + fname), exist_ok=True)
     with open(site_path + fname, 'wb') as f:
         text = r.text
-        text = text.replace('href="/"','href="#"')
-        text = text.replace('href="/','href="')
-        text = text.replace('src="/','src="')
+        #text = text.replace('href="/"','href="#"')
+        #text = text.replace('href="/','href="')
+        #text = text.replace('src="/','src="')
         f.write(text.encode('utf-8'))
         f.close()
 
@@ -234,16 +239,22 @@ def crawl(link):
             else:
                 _url = 'http://www.baloo.co/' + _url
 
-        log_save('.tmp.log')
-        if chk_baloo(_url):
+        log_idx += 1
+        if log_idx > 10:
+            log_idx = 0
+        log_save('.{}.log'.format(log_idx))
+        if chk_baloo(_url) and not _url in visited_links and not _url in error_links and mlink in _url:
             try:
-                crawl(_url)
+                log_pr('>->: {} >-> {}'.format(mlink, _url))
+                crawl(_url, depth+1)
             except:
-                error_links.append(link.get('href'))
+                error_links.append(_url)
 
+    log_pr('<-<: {} <-< {}'.format(_url, mlink))
+    log_pr('<<<: @{}'.format(depth))
 
 def run():
-    crawl('http://www.baloo.co')
+    crawl('http://www.baloo.co', 0)
     return()
 
     log_pr('Link crawled\n')

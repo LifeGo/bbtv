@@ -93,8 +93,8 @@ def sss():
 
 	for root, dirs, files in os.walk(cwdir):
 		for name in files:
-			if name.lower().endswith('.html'):
-				fullname = root + '/' + name
+			fullname = root + '/' + name
+			if fullname.lower().endswith('.html') or '/page/' in fullname:
 				print(fullname)
 				fs = open(fullname)
 				try:
@@ -105,8 +105,8 @@ def sss():
 				#for rep in rep_dict:
 				#	text = text.replace(rep, rep_dict[rep])
 
-				#soup = BeautifulSoup(text, 'html.parser').prettify()
-				soup = BeautifulSoup(text, 'html.parser')
+				soup = BeautifulSoup(text, 'html.parser').prettify()
+				soup = BeautifulSoup(str(soup).encode('utf-8'), 'html.parser')
 				for div in soup.find_all("div", {'class':'container m-t-lg text-center'}): 
 					div.decompose()
 
